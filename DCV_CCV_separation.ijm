@@ -1,7 +1,7 @@
 macro "D_C_separation"{
 // Standardization parameters
 meanR		=	10.319; 	// mean radius
-sdR			=	3.159;		// sd radius
+sdR		=	3.159;		// sd radius
 meanGV		=	128.800;	// mean GV
 sdGV		=	5.030;		// sd GV
 meanDAZ		=	261.397; 	// mean distAZ
@@ -36,9 +36,9 @@ Dialog.addNumber("mean r",		meanR);
 Dialog.addNumber("sd r",		sdR);
 Dialog.addNumber("mean gv",		meanGV);	
 Dialog.addNumber("sd gv",		sdGV);
-Dialog.addNumber("mean distAZ",	meanDAZ);	
-Dialog.addNumber("sd distAZ",	sdDAZ);
-Dialog.addNumber("mean 2DSD",	meanSD);
+Dialog.addNumber("mean distAZ",		meanDAZ);	
+Dialog.addNumber("sd distAZ",		sdDAZ);
+Dialog.addNumber("mean 2DSD",		meanSD);
 Dialog.addNumber("sd 2DSD",		sdSD);
 
 // SVM weights and intercept
@@ -47,7 +47,7 @@ Dialog.addNumber("r",			R_weight);
 Dialog.addNumber("gv",			GV_weight);
 Dialog.addNumber("distAZ",		DAZ_weight);
 Dialog.addNumber("2DSD",		SD_weight);
-Dialog.addNumber("intercept",	theta);
+Dialog.addNumber("intercept",		theta);
 
 Dialog.show();
 
@@ -56,7 +56,7 @@ scaled		=	Dialog.getString();
 
 // Standardization parameters. 
 meanR		=	Dialog.getNumber();
-sdR			=	Dialog.getNumber();
+sdR		=	Dialog.getNumber();
 meanGV		=	Dialog.getNumber();
 sdGV		=	Dialog.getNumber();
 meanDAZ		=	Dialog.getNumber();
@@ -192,7 +192,7 @@ if(minGV > 120){
 // Standardize all arrays. Function at the end of macro.
 arrayR_sd		=	standardization(arrayR, meanR, sdR);
 arrayGV_sd		=	standardization(arrayGV, meanGV, sdGV); // with darkening of gv > 125
-arrayDistAZ_sd	=	standardization(arrayDistAZ, meanDAZ, sdDAZ);
+arrayDistAZ_sd		=	standardization(arrayDistAZ, meanDAZ, sdDAZ);
 arraySD_sd		=	standardization(arraySD, meanSD, sdSD);
 //
 
