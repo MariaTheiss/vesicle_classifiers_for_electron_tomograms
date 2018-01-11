@@ -12,6 +12,7 @@ import pandas as pd
 import copy
 import csv
 import string
+import glob
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
@@ -26,7 +27,7 @@ def main():
     filenames = []  # List with filenames 
 
 ###############################################################################    
-
+#
 #    # Filenames and output-csv name can be added here, 
 #    # if input from command-line is not available
 #    filenames = [
@@ -34,35 +35,16 @@ def main():
 #                'example/path/to/anotherfile.csv'
 #                ]
 #    csv_name = "classifier_results.csv"  
-
+#
 ###############################################################################    
  
     # if-condition applies if argvs are not entered within this script. 
     # They can thus be entered from the command-line
     if len(filenames) == 0:        
-        csv_name = sys.argv[1] # name of output csv-file
-        #TODO: Make sure output csv-file will not overwrite existing data
-    
-        # Raise KeyError if invalid character (like "/" indicating namespaces) are found in first argv.    
-        invalidChars = set(string.punctuation.replace("_", "")) # set "_" as valid character
-        invalidChars = set(string.punctuation.replace(".", "")) # set "." as valid character
-        
-        if any(char in invalidChars for char in csv_name):
-            raise KeyError("""first argv contains at least one invalid character.
-                             The first argv must contain the name of the output csv-file 
-                             or 'null' if no csv-output is desired.""")
-             
-        # add .csv if not existing. Necessary for Windows
-        if  csv_name != "null" and csv_name[-4:] != ".csv":
-            csv_name = csv_name + ".csv"
-        
-        # create list of filepaths 
-        for filename in sys.argv[2: ]:
-            filenames.append(filename)
+        csv_name, filenames = fromCommandLine(filenames)
     
     assert len(filenames) > 0, 'Please add files to process'
     assert len(filenames) < 81000001, 'Your files are over 9000^2.'
-
 
     # Process input
     x_train_std_list, x_test_std_list, y_train_list, y_test_list, names = prepareData(filenames)
@@ -76,7 +58,53 @@ def main():
                   knn_output_list, majority_output_list, names)
 
     return svm_output_list, knn_output_list, forest_output_list, majority_output_list, names
+
+
+def fromCommandLine(filenames):
+    csv_name = sys.argv[1] # name of output csv-file
+
+    # add .csv if not existing. Necessary for Windows
+    if  csv_name != "null" and csv_name[-4:] != ".csv":
+        csv_name = csv_name + ".csv"
+
+    # Alert user when files are overwritten
+    file_exists = glob.glob(csv_name)
     
+    while len(file_exists) > 0 and csv_name != "null":  # Enter loop when file exists and is not named "null"
+        response = input("Your output csv-file already exists. Do you want to overwrite? \"y\": continue. \"n\": rename. Don't forget the quotation marks. ")
+        
+        if response == "y":
+            break
+        
+        if response == "n":
+            csv_name = input("Please enter a new filename in quotation marks. ")
+          
+            if csv_name == "null":
+                break    
+            
+            if  csv_name[-4:] != ".csv":       
+                csv_name = csv_name + ".csv"               
+                        
+            file_exists = glob.glob(csv_name)   # Check again if file exists
+            
+        else: 
+            print("Invalid input. Don't forget the quotation marks. ")
+        
+    # Raise KeyError if invalid character (like "/" indicating namespaces) are found in first argv.    
+    invalidChars = set(string.punctuation.replace("_", "")) # set "_" as valid character
+    invalidChars = set(string.punctuation.replace(".", "")) # set "." as valid character
+    
+    if any(char in invalidChars for char in csv_name):
+        raise KeyError("""first argv contains at least one invalid character.
+                         The first argv must contain the name of the output csv-file 
+                         or 'null' if no csv-output is desired.""")
+                    
+    # create list of filepaths 
+    for filename in sys.argv[2: ]:
+        filenames.append(filename)
+            
+    return csv_name, filenames
+
 
 def prepareData(filenames):  
     """Input file-paths. Control and format data. Call functions to shuffle data,
@@ -98,7 +126,7 @@ def prepareData(filenames):
         # read in csv
         temp = pd.read_csv(filename)  
      
-        assert np.shape(temp) == (len(temp), 6), "Data does not have 6 columns."
+        assert np.shape(temp) == (len(temp), 5), "Data does not have 5 columns."
         assert temp.iloc[:, 4].dtype == 'O', "Column 5 must contain labels."
         assert all(temp.iloc[:, 4] != 'D '), "Delete whitespaces from labelvector."
 
