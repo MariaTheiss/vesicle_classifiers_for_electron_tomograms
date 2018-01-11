@@ -28,7 +28,7 @@ def main():
 ###############################################################################    
 
 #    # Filenames and output-csv name can be added here, 
-#    # if input from command-line does not work
+#    # if input from command-line is not available
 #    filenames = [
 #                'example/path/to/filename1.csv',
 #                'example/path/to/anotherfile.csv'
@@ -41,6 +41,7 @@ def main():
     # They can thus be entered from the command-line
     if len(filenames) == 0:        
         csv_name = sys.argv[1] # name of output csv-file
+        #TODO: Make sure output csv-file will not overwrite existing data
     
         # Raise KeyError if invalid character (like "/" indicating namespaces) are found in first argv.    
         invalidChars = set(string.punctuation.replace("_", "")) # set "_" as valid character
@@ -61,6 +62,7 @@ def main():
     
     assert len(filenames) > 0, 'Please add files to process'
     assert len(filenames) < 81000001, 'Your files are over 9000^2.'
+
 
     # Process input
     x_train_std_list, x_test_std_list, y_train_list, y_test_list, names = prepareData(filenames)
