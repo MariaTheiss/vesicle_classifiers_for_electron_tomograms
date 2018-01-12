@@ -61,6 +61,7 @@ def main():
 
 
 def fromCommandLine(filenames):
+    py3 = sys.version_info[0] > 2   # Check python version to select apropriate code blocks
     csv_name = sys.argv[1] # name of output csv-file
 
     # add .csv if not existing. Necessary for Windows
@@ -70,15 +71,22 @@ def fromCommandLine(filenames):
     # Alert user when files are overwritten
     file_exists = glob.glob(csv_name)
     
-    while len(file_exists) > 0 and csv_name != "null":  # Enter loop when file exists and is not named "null"
-        response = input("Your output csv-file already exists. Do you want to overwrite? \"y\": continue. \"n\": rename. Don't forget the quotation marks. ")
+    while len(file_exists) > 0 and csv_name != "null":  # Enter loop when filename exists and is not named "null"
         
+        if py3:
+            response = input("Your output csv-file already exists. Do you want to overwrite? y: continue. n: rename. ")
+        else: 
+            response = raw_input("Your output csv-file already exists. Do you want to overwrite? y: continue. n: rename. ")
+            
         if response == "y":
             break
         
         if response == "n":
-            csv_name = input("Please enter a new filename in quotation marks. ")
-          
+            if py3:
+                csv_name = input("Please enter a new filename. ")
+            else:
+                csv_name = raw_input("Please enter a new filename. ")
+
             if csv_name == "null":
                 break    
             
@@ -88,7 +96,7 @@ def fromCommandLine(filenames):
             file_exists = glob.glob(csv_name)   # Check again if file exists
             
         else: 
-            print("Invalid input. Don't forget the quotation marks. ")
+            print("Invalid input.")
         
     # Raise KeyError if invalid character (like "/" indicating namespaces) are found in first argv.    
     invalidChars = set(string.punctuation.replace("_", "")) # set "_" as valid character
