@@ -44,18 +44,17 @@ def main():
         csv_name, filenames = fromCommandLine(filenames)
     
     assert len(filenames) > 0, 'Please add files to process'
-    assert len(filenames) < 81000001, 'Your files are over 9000^2.'
-
+    
     # Process input
     x_train_std_list, x_test_std_list, y_train_list, y_test_list, names = prepareData(filenames)
     
-    svm_output_list, knn_output_list, forest_output_list, majority_output_list = classifiers(x_train_std_list, 
+    svm_output_list, knn_output_list, forest_output_list, majority_output_list, svm_parameters = classifiers(x_train_std_list, 
                                                                                              x_test_std_list, 
                                                                                              y_train_list, 
                                                                                              y_test_list)
     if csv_name != "null":
         createCsv(csv_name, svm_output_list, forest_output_list, 
-                  knn_output_list, majority_output_list, names)
+                  knn_output_list, majority_output_list, svm_parameters, names)
 
     return svm_output_list, knn_output_list, forest_output_list, majority_output_list, names
 
@@ -74,14 +73,15 @@ def fromCommandLine(filenames):
     while len(file_exists) > 0 and csv_name != "null":  # Enter loop when filename exists and is not named "null"
         
         if py3:
-            response = input("Your output csv-file already exists. Do you want to overwrite? y: continue. n: rename. ")
+            response = input("Output csv-file already exists. Do you want to overwrite? y: continue. n: rename. ")
         else: 
-            response = raw_input("Your output csv-file already exists. Do you want to overwrite? y: continue. n: rename. ")
+            response = raw_input("Output csv-file already exists. Do you want to overwrite? y: continue. n: rename. ")
             
         if response == "y":
             break
         
         if response == "n":
+            
             if py3:
                 csv_name = input("Please enter a new filename. ")
             else:
@@ -103,7 +103,7 @@ def fromCommandLine(filenames):
     invalidChars = set(string.punctuation.replace(".", "")) # set "." as valid character
     
     if any(char in invalidChars for char in csv_name):
-        raise KeyError("""first argv contains at least one invalid character.
+        raise KeyError("""First argv contains at least one invalid character.
                          The first argv must contain the name of the output csv-file 
                          or 'null' if no csv-output is desired.""")
                     
@@ -118,6 +118,8 @@ def prepareData(filenames):
     """Input file-paths. Control and format data. Call functions to shuffle data,
     split data into trainings- and testdata, standardize data. 
     """
+    print("Preprocessing data... ")
+    
     features_per_tomogram = []  # list with tomogram-wise feature-arrays 
     labels_per_tomogram = []    # list with tomogram-wise label-arrays
     
@@ -134,15 +136,17 @@ def prepareData(filenames):
         # read in csv
         temp = pd.read_csv(filename)  
      
-        assert np.shape(temp) == (len(temp), 5), "Data does not have 5 columns."
+        #assert np.shape(temp) == (len(temp), 5), "Data does not have 5 columns."
         assert temp.iloc[:, 4].dtype == 'O', "Column 5 must contain labels."
         assert all(temp.iloc[:, 4] != 'D '), "Delete whitespaces from labelvector."
 
         # Offset gv if darkest vesicle is brighter than 120
-        if np.min(temp.iloc[:, 1]) > 120:
+        #print("np.min: ", np.min(temp.iloc[:, 1]))
+        if int(np.min(temp.iloc[:, 1])) > 120:
             gv_offset = np.min(temp.iloc[:, 1]) - 120
             temp.iloc[:, 1] = temp.iloc[:, 1] - gv_offset
-            print(filename, " gv [8 bit] is offset by: ", gv_offset)    
+            print("gv [8 bit] of ", names[filenames.index(filename)], 
+                  " is offset by: ", np.around(-gv_offset, 1))    
     
         temp = temp[temp.iloc[:, 4] != 'E']      # Exclude data with label "E" (= Error) 
         label = temp.iloc[:, 4].values           # Set column 5 as label 
@@ -171,6 +175,8 @@ def trainTestCombinations(features_per_tomogram, labels_per_tomogram):
     are thereby standardized. List - indices of trainings- and test-arrays are corresponding. 
     Likewise with labels (y_train_list and y_test_list).
     """
+    print("Computing leave-one-out cross-validation combinations...")
+    
     x_train_std_list = [] # List with feature-arrays for training (standardized)
     x_test_std_list = []  # List with feature-arrays for testing (standardized)
     y_train_list = []     # List with label-arrays for training
@@ -212,7 +218,7 @@ def trainTestCombinations(features_per_tomogram, labels_per_tomogram):
 
 def standardization(x_train, x_test): 
     """Standardize data.
-    """
+    """ 
     sc = StandardScaler()
     
     sc.fit(x_train)
@@ -225,43 +231,52 @@ def standardization(x_train, x_test):
 def classifiers(x_train_std_list, x_test_std_list, y_train_list, y_test_list):
     """Call all classification-functions.
     """
+    print("Calling classifiers...")
     svm_output_list = []
     knn_output_list = []
     forest_output_list = []
     majority_output_list = []
+    
+    svm_parameter = np.empty((1, 5), dtype = float)
+
 
     for i in range(len(x_train_std_list)):
         # svm
-        svm_accuracy_list, svm_misclassified_list, svm_dc_precision, svm_dc_recall, svm_F_score, svm_y_pred = svm(x_train_std_list[i], 
+        svm_accuracy_list, svm_misclassified_list, svm_dc_precision, svm_dc_recall, svm_dc_f_score, svm_y_pred, weight_array, intercept = svm(x_train_std_list[i], 
                                                                                                                   x_test_std_list[i], 
                                                                                                                   y_train_list[i], 
                                                                                                                   y_test_list[i])            
         svm_output = [svm_accuracy_list, svm_misclassified_list, 
-                      svm_dc_precision, svm_dc_recall, svm_F_score]
-    
+                      svm_dc_precision, svm_dc_recall, svm_dc_f_score]
+
+
+        # Calculate mean weights and mean intercept of SVM
+        svm_parameter = np.add(svm_parameter, np.divide(np.append(weight_array[0], intercept[0]), len(x_train_std_list)))
+
+
         # knn
-        knn_accuracy_list, knn_misclassified_list, knn_dc_precision, knn_dc_recall, knn_F_score, knn_y_pred = knn(x_train_std_list[i], 
+        knn_accuracy_list, knn_misclassified_list, knn_dc_precision, knn_dc_recall, knn_dc_f_score, knn_y_pred = knn(x_train_std_list[i], 
                                                                                                                   x_test_std_list[i], 
                                                                                                                   y_train_list[i], 
                                                                                                                   y_test_list[i])                 
         knn_output = [knn_accuracy_list, knn_misclassified_list, 
-                      knn_dc_precision, knn_dc_recall, knn_F_score]
+                      knn_dc_precision, knn_dc_recall, knn_dc_f_score]
     
         # Random forest
-        forest_accuracy_list, forest_misclassified_list, forest_dc_precision, forest_dc_recall, forest_F_score, forest_y_pred = randomForest(x_train_std_list[i], 
+        forest_accuracy_list, forest_misclassified_list, forest_dc_precision, forest_dc_recall, forest_dc_f_score, forest_y_pred = randomForest(x_train_std_list[i], 
                                                                                                                                              x_test_std_list[i], 
                                                                                                                                              y_train_list[i],
                                                                                                                                              y_test_list[i])         
         forest_output = [forest_accuracy_list, forest_misclassified_list, 
-                         forest_dc_precision, forest_dc_recall, forest_F_score]
+                         forest_dc_precision, forest_dc_recall, forest_dc_f_score]
         
         # Majority prediction
-        majority_accuracy_list, majority_misclassified_list, majority_dc_precision, majority_dc_recall, majority_f_score, majority_pred = majorityPrediction(svm_y_pred, 
+        majority_accuracy_list, majority_misclassified_list, majority_dc_precision, majority_dc_recall, majority_dc_f_score, majority_pred = majorityPrediction(svm_y_pred, 
                                                                                                                                                              knn_y_pred, 
                                                                                                                                                              forest_y_pred, 
                                                                                                                                                              y_test_list[i])
         majority_output = [majority_accuracy_list, majority_misclassified_list, 
-                           majority_dc_precision, majority_dc_recall, majority_f_score]
+                           majority_dc_precision, majority_dc_recall, majority_dc_f_score]
         
         # Summerize classifier-results in one list for each classifier.
         svm_output_list.append(svm_output)
@@ -269,7 +284,7 @@ def classifiers(x_train_std_list, x_test_std_list, y_train_list, y_test_list):
         forest_output_list.append(forest_output)
         majority_output_list.append(majority_output)
         
-    return svm_output_list, knn_output_list, forest_output_list, majority_output_list
+    return svm_output_list, knn_output_list, forest_output_list, majority_output_list, svm_parameter
 
 
 def svm(x_train_standard, x_test_standard, y_train, y_test):   
@@ -280,9 +295,13 @@ def svm(x_train_standard, x_test_standard, y_train, y_test):
     svm.fit(x_train_standard, y_train)
     y_pred = svm.predict(x_test_standard)
  
-    accuracy_list, misclassified_list, dc_precision, dc_recall, f_score = evaluateClassifier(y_test, y_pred)
+    accuracy_list, misclassified_list, dc_precision, dc_recall, dc_f_score = evaluateClassifier(y_test, y_pred)
     
-    return accuracy_list, misclassified_list, dc_precision, dc_recall, f_score, y_pred
+    
+    weight_array = svm.fit(x_train_standard, y_train).coef_
+    intercept = svm.fit(x_train_standard, y_train).intercept_
+
+    return accuracy_list, misclassified_list, dc_precision, dc_recall, dc_f_score, y_pred, weight_array, intercept
 
 
 def knn(x_train_standard, x_test_standard, y_train, y_test):
@@ -293,9 +312,9 @@ def knn(x_train_standard, x_test_standard, y_train, y_test):
     knn.fit(x_train_standard, y_train)
     y_pred = knn.predict(x_test_standard)
    
-    accuracy_list, misclassified_list, dc_precision, dc_recall, f_score = evaluateClassifier(y_test, y_pred)
+    accuracy_list, misclassified_list, dc_precision, dc_recall, dc_f_score = evaluateClassifier(y_test, y_pred)
 
-    return accuracy_list, misclassified_list, dc_precision, dc_recall, f_score, y_pred
+    return accuracy_list, misclassified_list, dc_precision, dc_recall, dc_f_score, y_pred
 
 
 def randomForest(x_train_standard, x_test_standard, y_train, y_test):
@@ -306,14 +325,14 @@ def randomForest(x_train_standard, x_test_standard, y_train, y_test):
     forest.fit(x_train_standard, y_train)
     y_pred = forest.predict(x_test_standard)    
 
-    accuracy_list, misclassified_list, dc_precision, dc_recall, f_score = evaluateClassifier(y_test, y_pred)
+    accuracy_list, misclassified_list, dc_precision, dc_recall, dc_f_score = evaluateClassifier(y_test, y_pred)
     
-    return accuracy_list, misclassified_list, dc_precision, dc_recall, f_score, y_pred
+    return accuracy_list, misclassified_list, dc_precision, dc_recall, dc_f_score, y_pred
 
 
 def majorityPrediction(svm_y_pred, knn_y_pred, forest_y_pred, y_test):
     """Create a majority-prediction of all three classifiers.
-    """
+    """ 
     assert len(svm_y_pred) == len(knn_y_pred) == len(forest_y_pred), "predictions not same the length for all classifiers"
    
     majority_pred = np.zeros(shape = (len(svm_y_pred)))
@@ -325,15 +344,15 @@ def majorityPrediction(svm_y_pred, knn_y_pred, forest_y_pred, y_test):
         else: 
             majority_pred[i] = -1
               
-    accuracy_list, misclassified_list, dc_precision, dc_recall, f_score = evaluateClassifier(y_test, majority_pred)
+    accuracy_list, misclassified_list, dc_precision, dc_recall, dc_f_score = evaluateClassifier(y_test, majority_pred)
             
-    return accuracy_list, misclassified_list, dc_precision, dc_recall, f_score, majority_pred
+    return accuracy_list, misclassified_list, dc_precision, dc_recall, dc_f_score, majority_pred
 
 
 def evaluateClassifier(y_test, y_pred):
     """Calculate accuracy, number of misclassified samples. 
     Calculates precision, recall and F-score for DCV
-    """  
+    """      
     dcv_tp = 0    # True positive DCV
     dcv_fp = 0    # False positive DCV
     dcv_fn = 0    # False negative DCV 
@@ -367,16 +386,18 @@ def evaluateClassifier(y_test, y_pred):
     
     # DCV F-score
     if (dcv_tp + dcv_fp) > 0 and (dcv_tp + dcv_fn) > 0:
-        f_score = 2 * (dc_precision * dc_recall) / (dc_precision + dc_recall)    
-    else: f_score = "NA"
+        dc_f_score = 2 * (dc_precision * dc_recall) / (dc_precision + dc_recall)    
+    else: dc_f_score = "NA"
     
-    return accuracy, misclassified, dc_precision, dc_recall, f_score
+    return accuracy, misclassified, dc_precision, dc_recall, dc_f_score
 
 
 def createCsv(csv_name, svm_output_list, forest_output_list, 
-              knn_output_list, majority_output_list, names):
+              knn_output_list, majority_output_list, svm_parameters, names):
     """Create a .csv file with classification results"
     """
+    
+    print("Writing CSV...")
     classifier_dict_svm = {}
     classifier_dict_forest = {}
     classifier_dict_knn = {}
@@ -396,7 +417,13 @@ def createCsv(csv_name, svm_output_list, forest_output_list,
         # svm
         csvwriter.writerow(["svm: gamma = 1, C = 1"])          
         appendClassifierToCsv(classifier_dict_svm, csvwriter)
-
+        csvwriter.writerow(["SVM weights and intercept"])
+        csvwriter.writerow(["weight_radius", "weight_gv", "weight_dist", "weight_GVSD", "intercept"])
+        csvwriter.writerow([svm_parameters[0][0], svm_parameters[0][1], 
+                           svm_parameters[0][2], svm_parameters[0][3], 
+                           svm_parameters[0][4]])
+        csvwriter.writerow([""])
+       
         # random forest
         csvwriter.writerow(["random forest:, n trees = 10, entropy"])
         appendClassifierToCsv(classifier_dict_forest, csvwriter)
