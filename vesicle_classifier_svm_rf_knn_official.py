@@ -36,6 +36,15 @@ def main():
 #                ]
 #    csv_name = "classifier_results.csv"  
 #
+    filenames = ['/home/s321411/data/Github_classification_data/Hermaphrodite/H_F2_s1_VNC_110617_features.csv'  
+                ,'/home/s321411/data/Github_classification_data/Hermaphrodite/H_L2_DNC_features_X.csv'  
+                ,'/home/s321411/data/Github_classification_data/Hermaphrodite/H_M1_VNC_180717_features.csv'
+                ,'/home/s321411/data/Github_classification_data/Hermaphrodite/H_p3s5VNC_100617_features.csv'
+                ,'/home/s321411/data/Github_classification_data/Hermaphrodite/H_R1_w1_s3_VNC_features_X.csv'
+                ,'/home/s321411/data/Github_classification_data/Hermaphrodite/H_Sebastian_N2_D3.csv'
+                ,'/home/s321411/data/Github_classification_data/Hermaphrodite/H_Sebastian_N2_D4.csv'
+                ]
+    csv_name = "asfdasd"
 ###############################################################################    
  
     # if-condition applies if argvs are not entered within this script. 
@@ -46,15 +55,17 @@ def main():
     assert len(filenames) > 0, 'Please add files to process'
     
     # Process input
-    x_train_std_list, x_test_std_list, y_train_list, y_test_list, names = prepareData(filenames)
+    x_train_std_list, x_test_std_list, y_train_list, y_test_list, names,  standardization_parameters, svm_parameters = prepareData(filenames)
     
-    svm_output_list, knn_output_list, forest_output_list, majority_output_list, svm_parameters = classifiers(x_train_std_list, 
+    
+    svm_output_list, knn_output_list, forest_output_list, majority_output_list = classifiers(x_train_std_list, 
                                                                                              x_test_std_list, 
                                                                                              y_train_list, 
                                                                                              y_test_list)
+
     if csv_name != "null":
         createCsv(csv_name, svm_output_list, forest_output_list, 
-                  knn_output_list, majority_output_list, svm_parameters, names)
+                  knn_output_list, majority_output_list, standardization_parameters, svm_parameters, names)
 
     return svm_output_list, knn_output_list, forest_output_list, majority_output_list, names
 
@@ -124,6 +135,8 @@ def prepareData(filenames):
     labels_per_tomogram = []    # list with tomogram-wise label-arrays
     
     names = copy.deepcopy(filenames)   # shortened filenames are saved in list "names"
+
+    
     
     for filename in filenames: 
         # Shorten filenames if possible
@@ -141,7 +154,6 @@ def prepareData(filenames):
         assert all(temp.iloc[:, 4] != 'D '), "Delete whitespaces from labelvector."
 
         # Offset gv if darkest vesicle is brighter than 120
-        #print("np.min: ", np.min(temp.iloc[:, 1]))
         if int(np.min(temp.iloc[:, 1])) > 120:
             gv_offset = np.min(temp.iloc[:, 1]) - 120
             temp.iloc[:, 1] = temp.iloc[:, 1] - gv_offset
@@ -162,14 +174,22 @@ def prepareData(filenames):
     assert len(features_per_tomogram) == len(filenames), "n files != n filenames"
     assert len(labels_per_tomogram) == len(filenames)
     
+    width = features_per_tomogram[0].shape[1]    # Save width of features_per_tomogram (= n features)
+    
+    standardization_parameters, svm_parameters = svmParameters(features_per_tomogram, 
+                                                               labels_per_tomogram, width)
+    
     x_train_std_list, x_test_std_list, y_train_list, y_test_list = trainTestCombinations(features_per_tomogram, 
-                                                                                         labels_per_tomogram)
+                                                                                         labels_per_tomogram, 
+                                                                                         width)
 
-    return x_train_std_list, x_test_std_list, y_train_list, y_test_list, names
+    return x_train_std_list, x_test_std_list, y_train_list, y_test_list, names, standardization_parameters, svm_parameters
 
 
-def trainTestCombinations(features_per_tomogram, labels_per_tomogram):   
-    """ Input list with all 
+def trainTestCombinations(features_per_tomogram, labels_per_tomogram, width):   
+    """ Input: features_per_tomogram: List of all tomograms containing their respective features. 
+    labels_per_tomogram: List of all tomograms containing their respective labels. 
+    width: Number of features
     Create four lists: x_train_std_list is a list containing all test-tomograms as arrays. 
     x_test_std_list is a list containing all training-tomograms as arrays. All features 
     are thereby standardized. List - indices of trainings- and test-arrays are corresponding. 
@@ -182,8 +202,9 @@ def trainTestCombinations(features_per_tomogram, labels_per_tomogram):
     y_train_list = []     # List with label-arrays for training
     y_test_list = []      # List with label-arrays for testing
     
-    _, width = features_per_tomogram[0].shape    # Save width of features_per_tomogram 
 
+
+    # Compute leave one out combinations
     for f in range(len(features_per_tomogram)):        
         x_train_summary = np.empty((0, width))   # Create empty array with same width as features_per_tomogram. 
         y_train_summary = np.empty((0, 0))       # Create empty array for labels
@@ -216,6 +237,32 @@ def trainTestCombinations(features_per_tomogram, labels_per_tomogram):
     return x_train_std_list, x_test_std_list, y_train_list, y_test_list
 
 
+def svmParameters(features_per_tomogram, labels_per_tomogram, width):
+        # Compute parameters of all vesicles without crossvalidation to determine overall SVM-parameters
+    all_as_training = []
+    all_as_label = []
+    
+    for f in range(len(features_per_tomogram)):
+        
+        all_as_training = np.empty((0, width))  
+        all_as_label = np.empty((0, 0))
+        
+        for array in features_per_tomogram:
+           all_as_training = np.append(all_as_training, array, axis = 0)
+        
+        for label in labels_per_tomogram: 
+            all_as_label = np.append(all_as_label, label)
+        
+    standardization_parameters = np.append([np.mean(all_as_training, axis = 0)], [np.std(all_as_training, axis = 0)], axis = 0) 
+    
+    all_as_training, _ = standardization(all_as_training, all_as_training)
+    _, _, _, _, _, _, weight_array, intercept = svm(all_as_training, all_as_training, all_as_label, all_as_label)
+    
+    svm_parameters = np.append(weight_array[0], intercept[0])
+    
+    return standardization_parameters, svm_parameters
+
+
 def standardization(x_train, x_test): 
     """Standardize data.
     """ 
@@ -237,21 +284,16 @@ def classifiers(x_train_std_list, x_test_std_list, y_train_list, y_test_list):
     forest_output_list = []
     majority_output_list = []
     
-    svm_parameter = np.empty((1, 5), dtype = float)
 
 
     for i in range(len(x_train_std_list)):
         # svm
-        svm_accuracy_list, svm_misclassified_list, svm_dc_precision, svm_dc_recall, svm_dc_f_score, svm_y_pred, weight_array, intercept = svm(x_train_std_list[i], 
+        svm_accuracy_list, svm_misclassified_list, svm_dc_precision, svm_dc_recall, svm_dc_f_score, svm_y_pred, _, _ = svm(x_train_std_list[i], 
                                                                                                                   x_test_std_list[i], 
                                                                                                                   y_train_list[i], 
                                                                                                                   y_test_list[i])            
         svm_output = [svm_accuracy_list, svm_misclassified_list, 
                       svm_dc_precision, svm_dc_recall, svm_dc_f_score]
-
-
-        # Calculate mean weights and mean intercept of SVM
-        svm_parameter = np.add(svm_parameter, np.divide(np.append(weight_array[0], intercept[0]), len(x_train_std_list)))
 
 
         # knn
@@ -284,7 +326,7 @@ def classifiers(x_train_std_list, x_test_std_list, y_train_list, y_test_list):
         forest_output_list.append(forest_output)
         majority_output_list.append(majority_output)
         
-    return svm_output_list, knn_output_list, forest_output_list, majority_output_list, svm_parameter
+    return svm_output_list, knn_output_list, forest_output_list, majority_output_list
 
 
 def svm(x_train_standard, x_test_standard, y_train, y_test):   
@@ -393,7 +435,7 @@ def evaluateClassifier(y_test, y_pred):
 
 
 def createCsv(csv_name, svm_output_list, forest_output_list, 
-              knn_output_list, majority_output_list, svm_parameters, names):
+              knn_output_list, majority_output_list, standardization_parameters, svm_parameters, names):
     """Create a .csv file with classification results"
     """
     
@@ -414,15 +456,14 @@ def createCsv(csv_name, svm_output_list, forest_output_list,
         csvwriter.writerow(["Test_Tomogram", "Accuracy", "misclassified", 
                             "DCV_precision", "DCV_recall", "DCF_F-Score"])        
         
+        
+       # csvwriter.writerow(list(names[i]) + list(svm_output_list[i]))
+            
         # svm
         csvwriter.writerow(["svm: gamma = 1, C = 1"])          
         appendClassifierToCsv(classifier_dict_svm, csvwriter)
         csvwriter.writerow(["SVM weights and intercept"])
-        csvwriter.writerow(["weight_radius", "weight_gv", "weight_dist", "weight_GVSD", "intercept"])
-        csvwriter.writerow([svm_parameters[0][0], svm_parameters[0][1], 
-                           svm_parameters[0][2], svm_parameters[0][3], 
-                           svm_parameters[0][4]])
-        csvwriter.writerow([""])
+
        
         # random forest
         csvwriter.writerow(["random forest:, n trees = 10, entropy"])
@@ -435,6 +476,14 @@ def createCsv(csv_name, svm_output_list, forest_output_list,
         # majority
         csvwriter.writerow(["majority prediction"])
         appendClassifierToCsv(classifier_dict_majority, csvwriter)
+
+        csvwriter.writerow(["", "radius", "gv", "dist", "GVSD", "intercept"])
+
+        # svm weights
+        csvwriter.writerow(parameter for parameter in (["svm_weights"] + list(svm_parameters)))
+        csvwriter.writerow(mean for mean in (["mean"] + list(standardization_parameters[0])))
+        csvwriter.writerow(std for std in (["std"] + list(standardization_parameters[1])))
+
 
 
 def appendClassifierToCsv(classifier_dict, csvwriter):
