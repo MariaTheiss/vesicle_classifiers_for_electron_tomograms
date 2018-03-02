@@ -36,15 +36,7 @@ def main():
 #                ]
 #    csv_name = "classifier_results.csv"  
 #
-    filenames = ['/home/s321411/data/Github_classification_data/Hermaphrodite/H_F2_s1_VNC_110617_features.csv'  
-                ,'/home/s321411/data/Github_classification_data/Hermaphrodite/H_L2_DNC_features_X.csv'  
-                ,'/home/s321411/data/Github_classification_data/Hermaphrodite/H_M1_VNC_180717_features.csv'
-                ,'/home/s321411/data/Github_classification_data/Hermaphrodite/H_p3s5VNC_100617_features.csv'
-                ,'/home/s321411/data/Github_classification_data/Hermaphrodite/H_R1_w1_s3_VNC_features_X.csv'
-                ,'/home/s321411/data/Github_classification_data/Hermaphrodite/H_Sebastian_N2_D3.csv'
-                ,'/home/s321411/data/Github_classification_data/Hermaphrodite/H_Sebastian_N2_D4.csv'
-                ]
-    csv_name = "asfdasd"
+
 ###############################################################################    
  
     # if-condition applies if argvs are not entered within this script. 
@@ -136,8 +128,7 @@ def prepareData(filenames):
     
     names = copy.deepcopy(filenames)   # shortened filenames are saved in list "names"
 
-    
-    
+      
     for filename in filenames: 
         # Shorten filenames if possible
         start = filename.rfind("/")
@@ -176,7 +167,7 @@ def prepareData(filenames):
     
     width = features_per_tomogram[0].shape[1]    # Save width of features_per_tomogram (= n features)
     
-    standardization_parameters, svm_parameters = svmParameters(features_per_tomogram, 
+    standardization_parameters, svm_parameters = getSvmParameters(features_per_tomogram, 
                                                                labels_per_tomogram, width)
     
     x_train_std_list, x_test_std_list, y_train_list, y_test_list = trainTestCombinations(features_per_tomogram, 
@@ -186,10 +177,49 @@ def prepareData(filenames):
     return x_train_std_list, x_test_std_list, y_train_list, y_test_list, names, standardization_parameters, svm_parameters
 
 
-def trainTestCombinations(features_per_tomogram, labels_per_tomogram, width):   
-    """ Input: features_per_tomogram: List of all tomograms containing their respective features. 
+def getSvmParameters(features_per_tomogram, labels_per_tomogram, width):
+    """ Input: 
+    features_per_tomogram: List of all tomograms containing their respective features. 
     labels_per_tomogram: List of all tomograms containing their respective labels. 
-    width: Number of features
+    width: Number of features.
+    Output: 
+    standardization_parameters: numpy array (2, n features) containing mean and std of pooled features.
+    svm_parameters: numpy array (n weights+intercept, ) containing containing svm weights and intercept 
+    of pooled features.
+    """
+
+    # create lists containing features or labels of all tomograms 
+    all_as_training = []
+    all_as_label = []
+    
+    for f in range(len(features_per_tomogram)):        
+        all_as_training = np.empty((0, width))  
+        all_as_label = np.empty((0, 0))
+        
+        for array in features_per_tomogram:
+           all_as_training = np.append(all_as_training, array, axis = 0)
+        
+        for label in labels_per_tomogram: 
+            all_as_label = np.append(all_as_label, label)
+       
+    # calculate mean and std of all tomograms.
+    standardization_parameters = np.append([np.mean(all_as_training, axis = 0)], [np.std(all_as_training, axis = 0)], axis = 0) 
+    
+    # standardize features for svm
+    all_as_training, _ = standardization(all_as_training, all_as_training)
+    
+    # call svm to return weights and intercept. Combine them to one array
+    _, _, _, _, _, _, weight_array, intercept = svm(all_as_training, all_as_training, all_as_label, all_as_label)
+    svm_parameters = np.append(weight_array[0], intercept[0])
+    
+    return standardization_parameters, svm_parameters
+
+
+def trainTestCombinations(features_per_tomogram, labels_per_tomogram, width):   
+    """ Input: 
+    features_per_tomogram: List of all tomograms containing their respective features. 
+    labels_per_tomogram: List of all tomograms containing their respective labels. 
+    width: Number of features.
     Create four lists: x_train_std_list is a list containing all test-tomograms as arrays. 
     x_test_std_list is a list containing all training-tomograms as arrays. All features 
     are thereby standardized. List - indices of trainings- and test-arrays are corresponding. 
@@ -236,31 +266,6 @@ def trainTestCombinations(features_per_tomogram, labels_per_tomogram, width):
         
     return x_train_std_list, x_test_std_list, y_train_list, y_test_list
 
-
-def svmParameters(features_per_tomogram, labels_per_tomogram, width):
-        # Compute parameters of all vesicles without crossvalidation to determine overall SVM-parameters
-    all_as_training = []
-    all_as_label = []
-    
-    for f in range(len(features_per_tomogram)):
-        
-        all_as_training = np.empty((0, width))  
-        all_as_label = np.empty((0, 0))
-        
-        for array in features_per_tomogram:
-           all_as_training = np.append(all_as_training, array, axis = 0)
-        
-        for label in labels_per_tomogram: 
-            all_as_label = np.append(all_as_label, label)
-        
-    standardization_parameters = np.append([np.mean(all_as_training, axis = 0)], [np.std(all_as_training, axis = 0)], axis = 0) 
-    
-    all_as_training, _ = standardization(all_as_training, all_as_training)
-    _, _, _, _, _, _, weight_array, intercept = svm(all_as_training, all_as_training, all_as_label, all_as_label)
-    
-    svm_parameters = np.append(weight_array[0], intercept[0])
-    
-    return standardization_parameters, svm_parameters
 
 
 def standardization(x_train, x_test): 
@@ -440,64 +445,42 @@ def createCsv(csv_name, svm_output_list, forest_output_list,
     """
     
     print("Writing CSV...")
-    classifier_dict_svm = {}
-    classifier_dict_forest = {}
-    classifier_dict_knn = {}
-    classifier_dict_majority = {}
     
-    for i in range(len(names)):
-        classifier_dict_svm.update({names[i]:svm_output_list[i]})
-        classifier_dict_forest.update({names[i]:forest_output_list[i]})
-        classifier_dict_knn.update({names[i]:knn_output_list[i]})
-        classifier_dict_majority.update({names[i]:majority_output_list[i]})       
-
     with open(csv_name, 'w+') as myfile: # open(filename, mode)
         csvwriter = csv.writer(myfile, quoting = csv.QUOTE_ALL)            
         csvwriter.writerow(["Test_Tomogram", "Accuracy", "misclassified", 
-                            "DCV_precision", "DCV_recall", "DCF_F-Score"])        
-        
-        
-       # csvwriter.writerow(list(names[i]) + list(svm_output_list[i]))
+                            "DCV_precision", "DCV_recall", "DCF_F-Score"])   
             
-        # svm
-        csvwriter.writerow(["svm: gamma = 1, C = 1"])          
-        appendClassifierToCsv(classifier_dict_svm, csvwriter)
-        csvwriter.writerow(["SVM weights and intercept"])
+         # svm           
+        csvwriter.writerow(["svm: gamma = 1, C = 1"])      
+        for i in range(len(names)):
+            csvwriter.writerow(tomogram for tomogram in ([names[i]] + svm_output_list[i]))
+        csvwriter.writerow([""])
 
-       
         # random forest
-        csvwriter.writerow(["random forest:, n trees = 10, entropy"])
-        appendClassifierToCsv(classifier_dict_forest, csvwriter)
-        
+        csvwriter.writerow(["random forest:, n trees = 10, entropy"])  
+        for i in range(len(names)):
+            csvwriter.writerow(tomogram for tomogram in ([names[i]] + forest_output_list[i]))
+        csvwriter.writerow([""])
+      
         # knn
         csvwriter.writerow(["knn: neighbours = 10, p = 2"])
-        appendClassifierToCsv(classifier_dict_knn, csvwriter)
-        
+        for i in range(len(names)):
+            csvwriter.writerow(tomogram for tomogram in ([names[i]] + knn_output_list[i]))
+        csvwriter.writerow([""])
+         
         # majority
         csvwriter.writerow(["majority prediction"])
-        appendClassifierToCsv(classifier_dict_majority, csvwriter)
-
+        for i in range(len(names)):
+            csvwriter.writerow(tomogram for tomogram in ([names[i]] + majority_output_list[i]))
+        csvwriter.writerow([""])
+    
+        # svm parameters
         csvwriter.writerow(["", "radius", "gv", "dist", "GVSD", "intercept"])
-
-        # svm weights
         csvwriter.writerow(parameter for parameter in (["svm_weights"] + list(svm_parameters)))
         csvwriter.writerow(mean for mean in (["mean"] + list(standardization_parameters[0])))
         csvwriter.writerow(std for std in (["std"] + list(standardization_parameters[1])))
 
-
-
-def appendClassifierToCsv(classifier_dict, csvwriter):
-        """Function called by createCsv to append several classifiers without 
-        adding too many lines of code
-        """
-        for tomogram in classifier_dict: 
-            csvwriter.writerow([tomogram, 
-                                classifier_dict[tomogram][0], 
-                                classifier_dict[tomogram][1], 
-                                classifier_dict[tomogram][2], 
-                                classifier_dict[tomogram][3], 
-                                classifier_dict[tomogram][4]])
-        csvwriter.writerow("")
             
 
 if __name__ == '__main__':   
