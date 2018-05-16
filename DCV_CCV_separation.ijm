@@ -1,22 +1,22 @@
 macro "D_C_separation"{
 // Standardization parameters
-meanR		=	10.319; 	// mean radius
-sdR		=	3.159;		// sd radius
-meanGV		=	128.800;	// mean GV
-sdGV		=	5.030;		// sd GV
-meanDAZ		=	261.397; 	// mean distAZ
-sdDAZ		=	119.019;	// sd distAZ
-meanSD		=	5.786;		// mean sd of middle slice
-sdSD		=	1.688;		// sd sd of middle slice
+meanR		=	10.394; 	// mean radius
+sdR			=	3.128;		// sd radius
+meanGV		=	129.070;	// mean GV
+sdGV		=	4.653;		// sd GV
+meanDAZ		=	259.125; 	// mean distAZ
+sdDAZ		=	118.528;	// sd distAZ
+meanSD		=	5.852;		// mean sd of middle slice
+sdSD		=	1.712;		// sd sd of middle slice
 
 // SVM Weights
-R_weight	=	-1.698;
-GV_weight	=	1.521;
-DAZ_weight	=	-0.747;
-SD_weight	=	1.474;
+R_weight	=	-1.687;
+GV_weight	=	1.646;
+DAZ_weight	=	-0.758;
+SD_weight	=	1.214;
 
 // Intercept
-theta		=	4.261;
+theta		=	4.362;
 
 // Empty arrays to store vesicle-wise features 
 arrayR		=	newArray();
@@ -72,6 +72,13 @@ SD_weight	=	Dialog.getNumber();
 
 // Intercept
 theta		=	Dialog.getNumber();
+
+
+// Save parameters of the scaled stack to transfer them to newly generated images 
+selectImage(scaled);
+getDimensions(_, _, channels, slices, frames); 
+getVoxelSize(width, height, depth, unit)
+
 
 run("3D Manager");
 selectImage(segmented);
@@ -233,6 +240,7 @@ for (i = 0; i < nb; i++){
 
 
 newImage("label", "16-bit Black", w, h, s);	//New Image with same Width, Heigth and n Slices as StackSegmented is created
+run("Properties...", "channels=1 slices="+slices+" frames=1 unit="+unit+" pixel_width="+width+" pixel_height="+height+" voxel_depth="+depth);
 
 // Color vesicles according to labelArray
 for (i = 0; i < nb; i++){
