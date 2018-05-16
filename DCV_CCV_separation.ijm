@@ -76,19 +76,13 @@ theta		=	Dialog.getNumber();
 
 // Save parameters of the scaled stack to transfer them to newly generated images 
 selectImage(scaled);
-getDimensions(_, _, channels, slices, frames); 
-getVoxelSize(width, height, depth, unit)
-
+getDimensions(w, h, channels, s, frames); // get w, h, s (= width, height, nSlices) of the whole image
+getVoxelSize(width, height, depth, unit); // width, height, depth returns scale of a single voxel
 
 run("3D Manager");
 selectImage(segmented);
 Ext.Manager3D_AddImage();
 Ext.Manager3D_Count(nb);    // Count vesicles
-
-// get w, h, s of segmented
-w	=	getWidth();
-h	=	getHeight();
-s	=	nSlices();
 
 setTool("point");
 selectWindow(scaled);
@@ -240,7 +234,7 @@ for (i = 0; i < nb; i++){
 
 
 newImage("label", "16-bit Black", w, h, s);	//New Image with same Width, Heigth and n Slices as StackSegmented is created
-run("Properties...", "channels=1 slices="+slices+" frames=1 unit="+unit+" pixel_width="+width+" pixel_height="+height+" voxel_depth="+depth);
+run("Properties...", "channels=1 slices="+s+" frames=1 unit="+unit+" pixel_width="+width+" pixel_height="+height+" voxel_depth="+depth);
 
 // Color vesicles according to labelArray
 for (i = 0; i < nb; i++){
